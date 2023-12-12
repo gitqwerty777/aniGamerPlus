@@ -768,7 +768,8 @@ def __init_proxy():
     else:
         print('使用代理連接動畫瘋, 使用http/https/socks5協議')
 
-
+def doRequest(url, headers, cookies, params=None):
+    return requests.get(url, headers=headers, cookies=cookies, params=params)
 def do_request(url, headers, cookies, params=None):
     return requests.get(url, headers=headers, cookies=cookies, params=params)
 
@@ -776,11 +777,15 @@ def do_request(url, headers, cookies, params=None):
 def parse_anime(soup, animes, headers, cookies):
     if soup.text.find("目前沒有訂閱內容") != -1:
         return False
+    with open("test.html", "w", encoding="utf-8") as f:
+        f.write(soup.prettify())
     for animeInfo in soup.select_one(".theme-list-block").select("a"):
         response = do_request(f"https://ani.gamer.com.tw/{animeInfo['href']}", headers, cookies)
         sn = response.url.split("=")[-1]
         name = animeInfo.select_one(".theme-name").text
         animes.append({"sn": sn, "name": name})
+        time.sleep(10)
+        print("wait 10 sec to avoid ban")
     return True
 
 
@@ -808,18 +813,34 @@ def export_my_anime():
     animes = []
     while True:
         params = {'page': page, 'sort': 0}
-        bahamygatherPage = do_request(url, headers=header, cookies=cookies, params=params)
+        err_print(0, err_msg=str(params), status=1, no_sn=True)
+        print(cookies)
+        print(url)
+        print(header)
+        try:
+            bahamygatherPage = doRequest(url, headers=header, cookies=cookies, params=params)
+        except Exception as e:
+            err_print(0, f"取得我的動畫失敗，可能是cookie已失效", status=1, no_sn=True)
+            print(e)
+            break
         if bahamygatherPage.status_code == requests.codes.ok:
             soup = BeautifulSoup(bahamygatherPage.text, 'html.parser')
             if not parse_anime(soup, animes, header, cookies):
                 break
+            with open("my_anime.txt", "w", encoding="utf-8") as f:
+                for anime in animes:
+                    f.write(f"{anime['sn']} all <{anime['name']}>\n")
         else:
-            err_print(0, f"匯入我的動畫失敗，狀態碼{bahamygatherPage.status_code}", status=1, no_sn=True)
+            err_print(0, f"取得我的動畫失敗，狀態碼{bahamygatherPage.status_code}", status=1, no_sn=True)
+            break
         page += 1
+        print("wait 10 sec to avoid ban")
+        time.sleep(10)
 
-    with open("my_anime.txt", "w", encoding="utf-8") as f:
-        for anime in animes:
-            f.write(f"{anime['sn']} all <{anime['name']}>\n")
+        animes = sorted(animes, key=lambda x: int(x['sn']))
+        with open("my_anime.txt", "w", encoding="utf-8") as f:
+            for anime in animes:
+                f.write(f"{anime['sn']} all <{anime['name']}>\n")
 
 
 def run_dashboard():
@@ -903,6 +924,7 @@ if __name__ == '__main__':
         arg = parser.parse_args()
 
         if arg.my_anime:
+            print("my_anime")    
             export_my_anime()
             sys.exit(0)
 
